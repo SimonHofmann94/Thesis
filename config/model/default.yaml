@@ -1,0 +1,9 @@
+# config/model/default.yaml
+# backbone: vgg11        # Möglichkeiten: vgg11, vgg16
+# pretrained: true       # vortrainierte ImageNet-Gewichte
+# num_classes: 5         # standardmäßig 5, für BSData beim Lauf auf 2 überschreiben
+
+
+backbone: densenet121   # vgg11 | vgg16 | resnet18 | resnet50 | efficientnet_b0 | densenet121
+pretrained: true
+num_classes: 5

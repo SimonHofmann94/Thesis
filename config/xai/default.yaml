@@ -1,0 +1,23 @@
+# config/xai/default.yaml
+debug_limit_images_for_xai_patches: null # Nicht mehr hier relevant, da wir spezifische Bilder analysieren
+
+batch_size: 1 # Für die gezielte Analyse oft 1
+save_visualizations: true
+viz_fig_width: 7
+viz_fig_height: 7 # Etwas größer für einzelne Patch-Ansicht
+
+run_name: targeted_defect_analysis_v2
+analyze_original_images: # Liste der Bilddateinamen (mit Extension) aus deinem img_dir
+  - "d3e65fe39.jpg"
+  - "e8e2cebb0.jpg"
+  - "7935f32da.jpg"
+  - "58f6093db.jpg"
+  # - "bild_mit_grossem_defekt.jpg"
+  # - "bild_mit_kleinem_defekt.jpg"
+  # - "bild_mit_defect_2.jpg" 
+  # ... füge hier die Bilder hinzu, die du genau untersuchen willst
+
+lrp_channel_aggregation_method: "max" # Optionen: "sum", "mean", "max", "sum_positive"
+# "sum_positive" ist oft ein guter Start, da es sich auf das konzentriert, was für die Klasse spricht.
+
+log_interval_batches: 1 # Damit du für jeden Batch (Patch) Output siehst bei Batch_Size=1

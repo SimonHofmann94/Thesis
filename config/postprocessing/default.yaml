@@ -1,0 +1,80 @@
+# config/postprocessing/default.yaml
+active_pipeline_name: "otsu_forest_clean" # Die Pipeline, die du testen willst
+
+source_xai_run_name: "targeted_defect_analysis_v1"   # Name des XAI-Laufs, dessen Ergebnisse du verwenden willst
+source_lrp_aggregation: "sum_positive"      # Aggregationsmethode der .npy-Attributionskarten
+classes_to_process: ["defect_1", "defect_3"] # Nur diese Klassen für einen Testlauf verarbeiten
+limit_patches_per_class: 5                  # Verarbeite max. 5 Patches pro Klasse (None für alle)
+
+save_step_visualizations: true              # Sollen die Plots mit den Zwischenschritten gespeichert werden?
+visualize_steps_for_first_n_patches: 2      # Nur für die ersten X Patches pro Klasse die Schritte plotten
+save_processed_patch_as_png: true           # Finale binäre Patch-Maske auch als PNG speichern?
+
+pipelines:
+  # Einfacher Fixed Threshold mit etwas Bereinigung
+  fixed_simple_clean:
+    - type: normalize_to_01 # Optional, aber oft gut vor festem Threshold
+    - type: threshold_fixed
+      params:
+        threshold_value: 0.3 # Beispielwert, muss angepasst werden
+    - type: morphology
+      params:
+        operations:
+          - type: open 
+            kernel_size: [3,3]
+          - type: close
+            kernel_size: [3,3]
+
+  # Otsu mit deiner "Forest"-Idee
+  otsu_forest_clean:
+    - type: threshold_otsu 
+      # params: {} # Otsu braucht keine extra Parameter hier
+    - type: morphology
+      params:
+        operations:
+          - type: close
+            kernel_size: [7,7] # Größerer Kernel für Close
+            iterations: 1
+          - type: area_open
+            min_area: 50       # Mindestfläche, um erhalten zu bleiben
+          - type: close
+            kernel_size: [3,3]
+            iterations: 1
+          - type: open # Ein finales Opening, um sehr feine Linien zu glätten
+            kernel_size: [3,3]
+
+  # GMM-basierte Segmentierung mit Forest-Bereinigung
+  gmm_forest_clean:
+    - type: normalize_to_01 # GMM profitiert oft von normalisierten Daten
+    - type: threshold_gmm
+      params:
+        n_components: 2
+        positive_component_threshold: 0.6 # Schwellenwert für P(Defekt)
+    - type: morphology
+      params:
+        operations: # Dieselbe Forest-Pipeline wie oben
+          - type: close
+            kernel_size: [7,7]
+            iterations: 1
+          - type: area_open
+            min_area: 50
+          - type: close
+            kernel_size: [3,3]
+            iterations: 1
+  
+  # Nur Percentile Threshold (zum Testen)
+  percentile_only:
+    - type: threshold_percentile
+      params:
+        percentile: 95 # Behalte die obersten 5% der Attributionen
+
+  # Nur GMM (zum Testen)
+  gmm_only:
+    - type: normalize_to_01
+    - type: threshold_gmm
+      params:
+        n_components: 2
+        positive_component_threshold: 0.5
+
+stitch_overlap_method: "max"  # Optionen: "max", "overwrite" (später vielleicht "average" für nicht-binäre)
+visualize_stitched_masks: false # Ob für die ersten paar Bilder Plots der gestitchten Masken erstellt werden sollen

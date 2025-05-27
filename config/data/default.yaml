@@ -1,0 +1,66 @@
+# config/data/default.yaml
+version_base: 1.3
+name: severstal       # <--- Name des aktuellen Datasets
+
+img_size: [256, 1024] # Allgemeine Bildgröße, nicht direkt für Patch/Strip verwendet
+
+# use_patch_mode: false # Veraltet, wenn training_mode verwendet wird
+# patch: # Veraltete Sektion, wenn training_mode verwendet wird
+#   size: 128
+#   stride: 128
+#   overlap_threshold: 0.15
+
+bsdata: # Behalte dies für andere mögliche Datasets
+  data_dir: data/BSData/data
+  label_dir: data/BSData/label
+  train_val_split: 0.875 
+  test_split: 0.2        
+
+severstal:
+  img_dir: data/Severstal/train/img_dmg  # Dein neuer Pfad für Bilder (nur die mit Schaden)
+  ann_dir: data/Severstal/train/ann_dmg  # Dein neuer Pfad für zugehörige Annotationen
+  severstal_train_split_ratio: 0.8       # Für den Split der *extrahierten Datenpunkte* (Patches oder Streifen)
+  
+  training_mode: "wide_strips" # Standardmodus: "patches" oder "wide_strips"
+
+  patch_processing: # Konfiguration für den traditionellen Patch-Modus
+    enabled: true # Aktivieren, wenn training_mode = "patches"
+    patch_size_hw: [256, 256]
+    stride_hw: [128, 128]
+    max_neg_patches_per_image: 5
+    min_positive_pixel_percentage: 0.001
+    debug_limit_images_patching: null # Setze auf eine Zahl für Debugging, sonst null für alle Bilder
+
+  wide_strip_processing: # Konfiguration für den neuen Streifen-Modus
+    enabled: true # Wird in train.py geprüft, sollte true sein, wenn training_mode = "wide_strips"
+    strip_height: 224
+    # random_crop_width: 1568 # Optional, wenn eine feste Breite für den Crop/Streifen gewünscht ist.
+                               # Wenn nicht gesetzt, wird die volle Bildbreite verwendet.
+    use_defect_blackout: true
+    defect_blackout_prob: 0.7       # Globale Wahrscheinlichkeit, dass Blackout überhaupt versucht wird (0.0 bis 1.0)
+    target_no_defect_ratio: 0.3     # Zielanteil von "kein Defekt"-Samples durch "Alles-Blackout" (0.0 bis 1.0, oder null zum Deaktivieren)
+    instance_blackout_prob_selective: 0.5 # Wahrscheinlichkeit pro Instanz im selektiven Blackout-Modus (0.0 bis 1.0)
+    blackout_min_pixels: 10         # Mindestgröße einer Defektinstanz, um für Blackout berücksichtigt zu werden
+    verbose_strip_dataset_debug: false # Auf true setzen für detaillierte Debug-Ausgaben vom Dataset und Blackout
+    # debug_limit_images_strips: null # Eigener Debug-Limit für Streifen, falls abweichend vom Patch-Limit gewünscht.
+                                     # Wenn nicht gesetzt, kann man in train.py/datasets.py auf 
+                                     # patch_processing.debug_limit_images_patching zurückfallen oder einen festen Wert nehmen.
+
+  # Gemeinsame Parameter für spätere Schritte
+  original_image_height_for_stitching: 256 # Standard Severstal Höhe
+  original_image_width_for_stitching: 1600 # Standard Severstal Breite
+
+  external_test_bases:
+    - "4ade4b747"
+    - "6d291e247"
+    - "2969217e8"
+    - "5c6cba0d4"
+    - "8eddcadff"
+    - "8866a93f6"
+    - "8bc5aeca3"
+    
+# Optional: Wenn du häufig zwischen Datasets wechselst, könntest du auch
+# separate data configs erstellen, z.B. data/severstal.yaml und data/bsdata.yaml
+# und dann beim Aufruf von train.py mit Hydra den Datensatz auswählen:
+# python train.py data=severstal
+# In diesem Fall würde der 'name' in der jeweiligen Datei stehen.

@@ -1,0 +1,12 @@
+torch
+torchvision
+hydra-core
+tensorboard
+numpy
+pandas
+omegaconf
+Pillow
+scikit-learn
+captum
+matplotlib
+scikit-image>=0.19.0

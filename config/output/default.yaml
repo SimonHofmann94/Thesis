@@ -1,0 +1,10 @@
+# config/output/default.yaml
+
+# Hauptverzeichnis, in dem alle Arten von Ausgaben landen (relativ zum Projekt-Root)
+base_dir: outputs 
+
+# Unterverzeichnisse (werden unter base_dir oder spezifischeren Pfaden erstellt)
+attributions_dir: ${output.base_dir}/attributions  # Für .npy und Visualisierungen der Attributionskarten
+masks_dir: ${output.base_dir}/masks               # Für binäre Segmentierungsmasken nach Postprocessing
+mask_comparison_dir: ${output.base_dir}/mask_comparison # Für Überlagerungen von GT und Pred Masken
+eval_results_dir: ${output.base_dir}/evaluation_results # Für CSVs etc. der Segmentierungs-Evaluierung

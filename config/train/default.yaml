@@ -1,0 +1,36 @@
+# config/train/default.yaml
+version_base: 1.3
+
+seed: 42
+device: cuda           # "cuda" oder "cpu"
+batch_size: 16
+num_workers: 4
+
+use_focal: True
+optimizer: adam        # möglich: adam, sgd
+lr: 0.001
+momentum: 0.9          # nur relevant für SGD
+patience: 10
+weight_decay: 0.0001
+
+lr_patience: 3         # ReduceLROnPlateau Geduld
+early_stop_patience: 5 # EarlyStopping Geduld
+max_epochs: 50
+
+tb_log_dir: runs/tensorboard   # TensorBoard-Logs
+ckpt_dir: checkpoints          # Modell-Checkpoints
+
+loss_function: "focal"  # Mögliche Werte: "bce", "focal"
+
+# Parameter für BCEWithLogitsLoss (pos_weight wird im Code berechnet)
+# max_pos_weight: 30.0 # Bereits vorhanden
+
+# Parameter für Focal Loss (nur relevant, wenn loss_function: "focal")
+focal_loss:
+  alpha_mode: "calculated" # "calculated" (aus Klassenverteilung) oder "fixed" (feste Werte)
+  # alpha_fixed: [0.25, 0.25, 0.25, 0.25, 0.25] # Beispiel für feste Alpha-Werte, wenn alpha_mode: "fixed"
+                                                # Die Länge muss num_classes entsprechen.
+                                                # Oft wird alpha für seltene Klassen höher gesetzt.
+                                                # Oder None, um Alpha-Gewichtung zu deaktivieren.
+  gamma: 2.0
+

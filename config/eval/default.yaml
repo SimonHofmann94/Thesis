@@ -1,0 +1,9 @@
+# config/eval/default.yaml
+
+# Schwellenwert für die Klassifikationsvorhersage, um ein Label als "positiv" zu betrachten.
+# Dieser Wert wird oft während des Trainings dynamisch für das Validierungsset ermittelt
+# und könnte hier als Default oder für die finale Testauswertung stehen.
+prediction_threshold: 0.6 # Guter Startwert, kann durch den besten Threshold aus dem Training überschrieben/informiert werden
+
+# Weitere Metrik-spezifische Einstellungen, falls nötig
+# z.B. für IoU-Berechnung etc.

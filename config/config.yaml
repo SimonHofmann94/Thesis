@@ -1,0 +1,14 @@
+# config/config.yaml
+version_base: 1.3
+
+defaults:
+  - _self_
+  - augment/default
+  - data/default
+  - model/default
+  - train/default
+  - output/default
+  - xai/default
+  - postprocessing/default
+  - eval/default
+  - evaluation/default
