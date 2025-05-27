@@ -269,15 +269,68 @@ def process_single_image(
     axes[1].axis('off')
 
     # 3. XAI Heatmap
+    # axes[2].imshow(image_pil_original) 
+    # if np.any(stitched_xai_heatmap): 
+    #     axes[2].imshow(stitched_xai_heatmap, cmap='viridis', alpha=0.7) # oder inferno, magma, viridis, oder für divergierende Fälle coolwarm, RdBu
+    # else:
+    #     axes[2].text(0.5, 0.5, 'Keine XAI-Relevanz\ngefunden/berechnet', 
+    #                  horizontalalignment='center', verticalalignment='center', 
+    #                  transform=axes[2].transAxes, color='gray', fontsize=10)
+
+    # axes[2].set_title(f"XAI Heatmap ({type(xai_explainer).__name__})", fontsize=12) # Größere Schrift
+    # axes[2].axis('off')
+
+    # Option 2
+    display_heatmap_for_visualization = np.zeros_like(stitched_xai_heatmap) # Für die finale Anzeige
+
+    # Nur fortfahren, wenn es signifikante Relevanz in der gestitchten Karte gibt
+    if np.any(stitched_xai_heatmap > 1e-5): 
+        positive_relevance_values = stitched_xai_heatmap[stitched_xai_heatmap > 1e-5]
+
+        if positive_relevance_values.size > 0:
+            # --- Perzentil-basiertes Thresholding und Skalierung ---
+            lower_percentile_threshold = 70 # Beispiel: Nur die Top 5% der positiven Relevanz anzeigen
+            # Du kannst auch ein oberes Perzentil definieren, wenn du Ausreißer kappen willst:
+            # upper_percentile_threshold = 99.9 
+            
+            val_at_lower_percentile = np.percentile(positive_relevance_values, lower_percentile_threshold)
+            # val_at_upper_percentile = np.percentile(positive_relevance_values, upper_percentile_threshold)
+
+            # Thresholding: Alles unter dem Perzentil wird 0, alles darüber behalten (oder clippen)
+            thresholded_heatmap = np.where(stitched_xai_heatmap >= val_at_lower_percentile, stitched_xai_heatmap, 0)
+            # Optional: oberes Clipping
+            # thresholded_heatmap = np.clip(thresholded_heatmap, val_at_lower_percentile, val_at_upper_percentile)
+            # Wenn nur unteres Clipping, dann ist das obere Clipping nicht nötig für die Normalisierung.
+
+            # Normalisiere die thresholded_heatmap auf den Bereich [0, 1] für die Visualisierung
+            min_val_after_thresh = np.min(thresholded_heatmap[thresholded_heatmap > 0]) if np.any(thresholded_heatmap > 0) else 0
+            max_val_after_thresh = np.max(thresholded_heatmap)
+            
+            if max_val_after_thresh > min_val_after_thresh:
+                display_heatmap_for_visualization = (thresholded_heatmap - min_val_after_thresh) / (max_val_after_thresh - min_val_after_thresh)
+                display_heatmap_for_visualization = np.clip(display_heatmap_for_visualization, 0, 1)
+            elif max_val_after_thresh > 0 : 
+                display_heatmap_for_visualization = (thresholded_heatmap > 0).astype(float) 
+            
+            # Annahme: verbose_debug ist als Parameter an process_single_image übergeben worden
+            # if verbose_debug: 
+            # print(f"  XAI Heatmap: Lower P({lower_percentile_threshold})={val_at_lower_percentile:.4f}, Min/Max after thresh/norm: {np.min(display_heatmap_for_visualization):.2f}/{np.max(display_heatmap_for_visualization):.2f}")
+        # else:
+            # if verbose_debug: print("  XAI Heatmap: Keine signifikanten positiven Relevanzwerte für Perzentil-Skalierung gefunden.")
+    # else:
+        # if verbose_debug: print("  XAI Heatmap: Gestitchte Karte ist komplett Null oder nahe Null.")
+
+
+    # --- Visualisierung (der Teil mit axes[2]) ---
     axes[2].imshow(image_pil_original) 
-    if np.any(stitched_xai_heatmap): 
-        axes[2].imshow(stitched_xai_heatmap, cmap='hot', alpha=0.6) 
+    if np.any(display_heatmap_for_visualization): # Verwende die bearbeitete Heatmap
+        axes[2].imshow(display_heatmap_for_visualization, cmap='viridis', alpha=0.6) 
     else:
-        axes[2].text(0.5, 0.5, 'Keine XAI-Relevanz\ngefunden/berechnet', 
+        axes[2].text(0.5, 0.5, 'Keine XAI-Relevanz\n(nach Bearbeitung)', 
                      horizontalalignment='center', verticalalignment='center', 
                      transform=axes[2].transAxes, color='gray', fontsize=10)
 
-    axes[2].set_title(f"XAI Heatmap ({type(xai_explainer).__name__})", fontsize=12) # Größere Schrift
+    axes[2].set_title(f"XAI Heatmap ({type(xai_explainer).__name__})", fontsize=12)
     axes[2].axis('off')
 
     # Anpassen des Layouts, um Überlappungen zu vermeiden und Platz für Titel zu schaffen

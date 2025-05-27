@@ -74,21 +74,56 @@ def get_transforms(cfg_augment_dict: dict, img_h_config: int, img_w_config: int,
     """
     Erzeugt Transformationspipelines.
     'is_train' steuert, ob Augmentierungen angewendet werden.
-    img_h_config, img_w_config sind jetzt die Patch-Dimensionen.
+    Wenn img_w_config <= 0, wird nur die Höhe angepasst und das Seitenverhältnis beibehalten.
     """
-    aug = cfg_augment_dict
+    aug = cfg_augment_dict 
     pil_transforms_list = []
 
+    # --- Logik für Resize / RandomResizedCrop ---
     if is_train:
         if aug.get("use_resizedcrop", False):
-            pil_transforms_list.append(transforms.RandomResizedCrop((img_h_config, img_w_config), scale=(0.8, 1.0), ratio=(0.9, 1.1)))
-        else:
-            pil_transforms_list.append(transforms.Resize((img_h_config, img_w_config))) # Muss da sein, wenn kein RRC
+            # RandomResizedCrop benötigt explizite Zielhöhe und -breite.
+            # Wenn img_w_config nicht positiv ist, macht RRC in dieser Form keinen Sinn.
+            # Wir könnten stattdessen nur die Höhe resizen und dann andere Augs anwenden,
+            # oder RRC nur anwenden, wenn beide Dimensionen gültig sind.
+            if img_h_config > 0 and img_w_config > 0:
+                pil_transforms_list.append(transforms.RandomResizedCrop((img_h_config, img_w_config), scale=(0.8, 1.0), ratio=(0.9, 1.1)))
+                if aug.get("verbose_transforms", False): print(f"TRAIN TF: RandomResizedCrop to ({img_h_config},{img_w_config})")
+            elif img_h_config > 0:
+                # Fallback, wenn RRC gewünscht, aber Breite ungültig ist: Nur Höhe resizen.
+                pil_transforms_list.append(transforms.Resize(img_h_config)) # Passt Höhe an, behält Aspekt
+                if aug.get("verbose_transforms", False): print(f"TRAIN TF: use_resizedcrop=True, aber ungültige Breite ({img_w_config}). Fallback zu Resize Höhe auf {img_h_config}.")
+            # else: Kein Resize, wenn auch Höhe ungültig
+        
+        # Standard Resize, wenn kein RRC oder RRC nicht anwendbar war
+        # Dieser Block wird erreicht, wenn use_resizedcrop=False ODER
+        # wenn use_resizedcrop=True aber keine gültigen Dimensionen dafür da waren UND noch kein Resize hinzugefügt wurde.
+        # Um Doppelung zu vermeiden, prüfen wir, ob schon ein Resize/RRC drin ist.
+        # Einfacher: Wenn RRC nicht hinzugefügt wurde, füge Standard-Resize hinzu.
+        elif not any(isinstance(t, (transforms.RandomResizedCrop, transforms.Resize)) for t in pil_transforms_list):
+            if img_h_config > 0 and img_w_config > 0:
+                pil_transforms_list.append(transforms.Resize((img_h_config, img_w_config)))
+                if aug.get("verbose_transforms", False): print(f"TRAIN TF: Resize to ({img_h_config},{img_w_config})")
+            elif img_h_config > 0: # Nur Höhe resizen, Breite proportional
+                pil_transforms_list.append(transforms.Resize(img_h_config))
+                if aug.get("verbose_transforms", False): print(f"TRAIN TF: Resize Höhe auf {img_h_config}, Breite proportional.")
+            # else: Kein Resize, wenn auch Höhe ungültig
+    else: # Für Validierung/Test
+        if img_h_config > 0 and img_w_config > 0:
+            pil_transforms_list.append(transforms.Resize((img_h_config, img_w_config)))
+            if aug.get("verbose_transforms", False): print(f"VAL/TEST TF: Resize to ({img_h_config},{img_w_config})")
+        elif img_h_config > 0: # Nur Höhe resizen, Breite proportional
+            pil_transforms_list.append(transforms.Resize(img_h_config))
+            if aug.get("verbose_transforms", False): print(f"VAL/TEST TF: Resize Höhe auf {img_h_config}, Breite proportional.")
+        # else: Kein Resize
+
+    # --- Andere Augmentierungen (unverändert von deinem Code) ---
+    if is_train:
         if aug.get("use_hflip", False):
             pil_transforms_list.append(transforms.RandomHorizontalFlip())
-        if aug.get("use_vflip", False):
+        if aug.get("use_vflip", False): # Für Streifen oft nicht sinnvoll
             pil_transforms_list.append(transforms.RandomVerticalFlip())
-        if aug.get("use_rotation", False):
+        if aug.get("use_rotation", False): # Für Streifen oft nicht sinnvoll
             pil_transforms_list.append(transforms.RandomRotation(aug.get("rotation_degree", 15)))
         if aug.get("use_colorjitter", False):
             pil_transforms_list.append(
@@ -97,27 +132,32 @@ def get_transforms(cfg_augment_dict: dict, img_h_config: int, img_w_config: int,
                                        saturation=aug.get("cj_saturation", 0.2),
                                        hue=aug.get("cj_hue", 0.1))
             )
-        if aug.get("use_perspective", False):
-            pil_transforms_list.append(
-                transforms.RandomPerspective(distortion_scale=aug.get("perspective_distortion_scale",0.5),
-                                             p=aug.get("perspective_p", 0.5))
-            )
-    else: # Für Validierung/Test
-        pil_transforms_list.append(transforms.Resize((img_h_config, img_w_config)))
+        # Perspective ist für Streifen auch eher unüblich
+        # if aug.get("use_perspective", False) and img_h_config > 0 and img_w_config > 0: 
+        #     pil_transforms_list.append(
+        #         transforms.RandomPerspective(distortion_scale=aug.get("perspective_distortion_scale",0.5),
+        #                                      p=aug.get("perspective_p", 0.5))
+        #     )
 
     pil_transforms_list.append(transforms.ToTensor())
 
     tensor_transforms_list = []
-    if is_train and aug.get("use_blur", False): # Blur nur im Training
+    if is_train and aug.get("use_blur", False):
         tensor_transforms_list.append(transforms.GaussianBlur(kernel_size=tuple(aug.get("blur_kernel", [3,3])), 
                                                               sigma=tuple(aug.get("blur_sigma", [0.1, 2.0]))))
-    if is_train and aug.get("use_erasing", False): # Erasing nur im Training
+    if is_train and aug.get("use_erasing", False):
         tensor_transforms_list.append(transforms.RandomErasing(p=aug.get("erasing_p",0.5), 
                                                               scale=tuple(aug.get("erasing_scale", [0.02, 0.33])), 
                                                               ratio=tuple(aug.get("erasing_ratio", [0.3, 3.3]))))
     
     normalize_transform = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     tensor_transforms_list.append(normalize_transform)
+
+    if aug.get("verbose_transforms", False) and pil_transforms_list: # Nur wenn verbose und Liste nicht leer
+        print(f"  PIL Transforms: {[type(t).__name__ for t in pil_transforms_list]}")
+    if aug.get("verbose_transforms", False) and tensor_transforms_list:
+        print(f"  Tensor Transforms: {[type(t).__name__ for t in tensor_transforms_list]}")
+
 
     return transforms.Compose(pil_transforms_list + tensor_transforms_list)
 
@@ -213,6 +253,18 @@ def main(cfg: DictConfig):
         # Analyse der Patch-Dataset-Zusammensetzung
         analyze_dataset_composition(train_dataset, "Trainingsset (Patches)", dataset_for_splitting_indices.patches_info)
         analyze_dataset_composition(val_dataset, "Validierungsset (Patches)", val_dataset_instance_with_val_tf.patches_info)
+        
+        print("\nAnalysiere Label-Verteilung im Trainings-Streifen-Dataset NACH Augmentierung...")
+        actual_train_label_counts = torch.zeros(num_labels_for_model, device=device)
+        # Erstelle einen temporären DataLoader, um durch das train_dataset zu iterieren
+        # Wichtig: shuffle=False hier, um eine konsistente einmalige Zählung zu bekommen.
+        # Batch-Größe kann hier größer sein, da wir nur Labels sammeln.
+        temp_label_loader = DataLoader(train_dataset, batch_size=cfg.train.batch_size * 2, shuffle=False, num_workers=cfg.train.num_workers)
+        
+        for _, labels, _ in temp_label_loader: # Ignoriere Bilder und Identifier hier
+            actual_train_label_counts += labels.sum(dim=0).to(device) # Summiere die Vorkommen pro Klasse
+        
+        print(f"Tatsächliche Anzahl positiver Labels pro Klasse im Trainings-Streifen-Set (nach Augmentierung): {actual_train_label_counts.cpu().numpy()}")
         
         # pos_weight Berechnung für Patches
         print("Berechne pos_weight für Patch-Modus...")
@@ -375,6 +427,68 @@ def main(cfg: DictConfig):
     )
     print(f"Train DataLoader: {len(train_loader)} Batches ({len(train_dataset)} Samples). Val DataLoader: {len(val_loader)} Batches ({len(val_dataset)} Samples).")
 
+    # --- Zählung der tatsächlichen Label-Verteilung NACH Augmentierung (WICHTIG!) ---
+    if current_training_mode == "wide_strips": # Stelle sicher, dass dies nur im Streifenmodus passiert
+        print("\nAnalysiere Label-Verteilung im Trainings-Streifen-Dataset NACH Augmentierung (für pos_weight/alpha)...")
+        num_labels_for_model = SeverstalStripDataset.NUM_TOTAL_CLASSES # Hole es von der korrekten Klasse
+        actual_train_label_counts = torch.zeros(num_labels_for_model, device=device)
+        
+        temp_label_loader = DataLoader(train_dataset, batch_size=cfg.train.batch_size * 4, shuffle=False, num_workers=0) # num_workers=0 kann hier stabiler sein
+        
+        print(f"Iteriere durch {len(train_dataset)} Trainings-Samples, um tatsächliche Label-Verteilung zu zählen...")
+        processed_samples_count = 0
+        for batch_idx_debug, data_batch_debug in enumerate(temp_label_loader): 
+            if len(data_batch_debug) == 3: _, labels_debug, _ = data_batch_debug
+            elif len(data_batch_debug) == 2: _, labels_debug = data_batch_debug
+            else: continue
+
+            if batch_idx_debug < 2 and strip_cfg.get("verbose_strip_dataset_debug", False):
+                print(f"  DEBUG Zählschleife - Batch {batch_idx_debug} Labels (erste 2): {labels_debug[:2].cpu().numpy()}")
+            actual_train_label_counts += labels_debug.sum(dim=0).to(device)
+            processed_samples_count += labels_debug.size(0)
+            if processed_samples_count % (cfg.train.batch_size * 4 * 10) == 0:
+                 print(f"  ... {processed_samples_count}/{len(train_dataset)} Samples für Label-Zählung verarbeitet.")
+        print("Label-Zählung abgeschlossen.")
+
+        # Überschreibe class_positive_counts_train und n_train_total_items für den wide_strips Modus
+        class_positive_counts_train = actual_train_label_counts 
+        n_train_total_items = len(train_dataset) 
+        print(f"DEBUG: class_positive_counts_train (wide_strips) WURDE AKTUALISIERT ZU: {class_positive_counts_train.cpu().numpy()}")
+        print(f"DEBUG: n_train_total_items (wide_strips) ist: {n_train_total_items}")
+
+
+    # --- Optionale Visualisierung von Beispiel-Trainings-Samples ---
+    # Dieser Block kann jetzt auch im Patch-Modus funktionieren, wenn gewünscht
+    # if cfg.get("visualize_training_samples", False): # Steuere es über eine neue Config-Option
+    # Für jetzt lassen wir es nur im wide_strips Modus, wenn es dort relevant ist
+    if current_training_mode == "wide_strips" and cfg.train.get("log_example_samples", True): # Neue Config-Option zum Steuern
+        print("\nSpeichere einige Beispiel-Trainings-Samples...")
+        try:
+            example_batch_data, example_batch_labels, _ = next(iter(train_loader)) # Hole einen neuen Batch
+            num_to_show = min(4, example_batch_data.size(0))
+            
+            fig, axes = plt.subplots(1, num_to_show, figsize=(num_to_show * 4, 4))
+            if num_to_show == 1: axes = [axes]
+
+            for k in range(num_to_show):
+                sample_to_show = example_batch_data[k].permute(1,2,0).cpu().numpy()
+                mean = np.array([0.485, 0.456, 0.406]); std = np.array([0.229, 0.224, 0.225])
+                sample_to_show = std * sample_to_show + mean
+                sample_to_show = np.clip(sample_to_show, 0, 1)
+                
+                ax = axes[k]
+                ax.imshow(sample_to_show)
+                ax.set_title(f"Label: {example_batch_labels[k].numpy().astype(int)}", fontsize=8)
+                ax.axis('off')
+            
+            plt.tight_layout()
+            example_save_path = os.path.join(tb_log_abs_dir, "training_sample_batch_0.png")
+            plt.savefig(example_save_path)
+            print(f"Beispiel-Trainings-Samples gespeichert unter: {example_save_path}")
+            plt.close(fig)
+        except Exception as e_vis:
+            print(f"Fehler beim Visualisieren von Trainingsbeispielen: {e_vis}")
+            
 
     # --- `pos_weight` oder `alpha` für Focal Loss Berechnung ---
     print(f"\nBerechne Gewichte für Verlustfunktion (Modus: {current_training_mode})...")

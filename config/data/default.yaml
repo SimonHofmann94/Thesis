@@ -17,8 +17,8 @@ bsdata: # Behalte dies für andere mögliche Datasets
   test_split: 0.2        
 
 severstal:
-  img_dir: data/Severstal/train/img_dmg  # Dein neuer Pfad für Bilder (nur die mit Schaden)
-  ann_dir: data/Severstal/train/ann_dmg  # Dein neuer Pfad für zugehörige Annotationen
+  img_dir: data/img_dmg/img_dmg  # Dein neuer Pfad für Bilder (nur die mit Schaden)
+  ann_dir: data/ann_dmg/ann_dmg  # Dein neuer Pfad für zugehörige Annotationen
   severstal_train_split_ratio: 0.8       # Für den Split der *extrahierten Datenpunkte* (Patches oder Streifen)
   
   training_mode: "wide_strips" # Standardmodus: "patches" oder "wide_strips"
@@ -37,8 +37,8 @@ severstal:
     # random_crop_width: 1568 # Optional, wenn eine feste Breite für den Crop/Streifen gewünscht ist.
                                # Wenn nicht gesetzt, wird die volle Bildbreite verwendet.
     use_defect_blackout: true
-    defect_blackout_prob: 0.7       # Globale Wahrscheinlichkeit, dass Blackout überhaupt versucht wird (0.0 bis 1.0)
-    target_no_defect_ratio: 0.3     # Zielanteil von "kein Defekt"-Samples durch "Alles-Blackout" (0.0 bis 1.0, oder null zum Deaktivieren)
+    defect_blackout_prob: 0.9       # Globale Wahrscheinlichkeit, dass Blackout überhaupt versucht wird (0.0 bis 1.0)
+    target_no_defect_ratio: 0.5     # Zielanteil von "kein Defekt"-Samples durch "Alles-Blackout" (0.0 bis 1.0, oder null zum Deaktivieren)
     instance_blackout_prob_selective: 0.5 # Wahrscheinlichkeit pro Instanz im selektiven Blackout-Modus (0.0 bis 1.0)
     blackout_min_pixels: 10         # Mindestgröße einer Defektinstanz, um für Blackout berücksichtigt zu werden
     verbose_strip_dataset_debug: false # Auf true setzen für detaillierte Debug-Ausgaben vom Dataset und Blackout
