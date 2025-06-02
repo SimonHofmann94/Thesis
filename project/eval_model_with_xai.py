@@ -19,32 +19,30 @@ try:
     from project.models import ClassifierModel 
     from project.train import get_transforms 
     from project.utils import create_full_mask_from_png_object 
+    from project.xai_methods import create_xai_method, get_available_methods
+    IMPORTS_SUCCESSFUL = True
 except ImportError:
     print("WARNUNG: Konnte Projektmodule nicht importieren. Stelle sicher, dass Pfade korrekt sind.")
-    print("Definiere Fallbacks oder stelle die Module bereit.")
-    # Fallback-Definitionen hier einfügen, wenn nötig (wie in inspect_image_predictions.py)
-    # ... (ClassifierModel, get_transforms, create_full_mask_from_png_object) ...
-
-class DummyExplainer:
-    def __init__(self, model): 
-        self.model = model
-        print("INFO: DummyExplainer initialisiert.") # Für Debugging
-    def attribute(self, inputs, target): 
-        print(f"INFO: DummyExplainer.attribute aufgerufen für Target {target}. Gebe Zufalls-Attributionen zurück.") # Für Debugging
-        return torch.rand_like(inputs) 
-
-# --- XAI Bibliothek (z.B. Captum) ---
-try:
-    from captum.attr import LRP, LayerConductance, DeepLift 
-    XAI_AVAILABLE = True
-    print("INFO: Captum erfolgreich importiert.")
-except ImportError:
-    print("WARNUNG: Captum nicht gefunden. XAI-Funktionalität wird auf DummyExplainer zurückfallen.")
-    XAI_AVAILABLE = False
-    # Überschreibe die Captum-Klassen mit dem Dummy, wenn Captum nicht da ist
-    LRP = DummyExplainer 
-    LayerConductance = DummyExplainer
-    DeepLift = DummyExplainer
+    print("Lade Fallback-Definitionen...")
+    IMPORTS_SUCCESSFUL = False
+    
+    # Fallback-Definitionen
+    import sys
+    import os
+    sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+    
+    # Versuche direkten Import
+    try:
+        from models import ClassifierModel 
+        from train import get_transforms 
+        from utils import create_full_mask_from_png_object 
+        from xai_methods import create_xai_method, get_available_methods
+        print("INFO: Direkte Imports erfolgreich.")
+        IMPORTS_SUCCESSFUL = True
+    except ImportError as e:
+        print(f"FEHLER: Auch direkte Imports fehlgeschlagen: {e}")
+        print("Das Skript kann nicht fortfahren.")
+        sys.exit(1)
 
 
 
@@ -77,26 +75,12 @@ def load_model(model_path: str) -> nn.Module:
 
 def get_xai_explainer(method_name: str, model: nn.Module) -> object:
     """Gibt ein XAI-Erklärungsobjekt zurück."""
-    if not XAI_AVAILABLE and method_name != "dummy":
-        print(f"WARNUNG: XAI-Methode '{method_name}' erfordert Captum, das nicht verfügbar ist. Verwende DummyExplainer.")
-        return DummyExplainer(model)
-
-    method_name_lower = method_name.lower()
-    if method_name_lower == "lrp":
-        # LRP muss oft wissen, welche Layer relevant sind, oder man verwendet LRP(model)
-        # Für komplexe Modelle kann die Konfiguration von LRP spezifisch sein.
-        # Ggf. muss man hier Layer auswählen, wenn Captums LRP nicht direkt mit allen Layern umgehen kann.
-        # Z.B. model.features für den Feature-Extraktor.
-        return LRP(model)
-    elif method_name_lower == "deeplift":
-        return DeepLift(model)
-    # Hier weitere XAI-Methoden hinzufügen
-    # elif method_name_lower == "integratedgradients":
-    #    return IntegratedGradients(model)
-    elif method_name_lower == "dummy":
-        return DummyExplainer(model)
-    else:
-        raise ValueError(f"Unbekannte XAI-Methode: {method_name}. Verfügbar: lrp, deeplift, dummy.")
+    try:
+        return create_xai_method(method_name, model, DEVICE)
+    except Exception as e:
+        print(f"WARNUNG: Fehler beim Erstellen der XAI-Methode '{method_name}': {e}")
+        print("Verwende DummyXAI als Fallback.")
+        return create_xai_method("dummy", model, DEVICE)
 
 
 def aggregate_attributions(attributions: torch.Tensor, mode="sum_positive") -> np.ndarray:
@@ -244,7 +228,7 @@ def process_single_image(
 
     fig, axes = plt.subplots(1, 3, figsize=(fig_width_inches, fig_height_inches)) # , dpi=fig_dpi)
     
-    fig.suptitle(f"Evaluation: {os.path.basename(img_path)} (XAI: {type(xai_explainer).__name__})", fontsize=16) # Größere Schrift für Titel
+    fig.suptitle(f"Evaluation: {os.path.basename(img_path)} (XAI: {xai_explainer.get_method_name()})", fontsize=16) # Größere Schrift für Titel
 
     # 1. Originalbild
     axes[0].imshow(image_pil_original)
@@ -330,17 +314,14 @@ def process_single_image(
                      horizontalalignment='center', verticalalignment='center', 
                      transform=axes[2].transAxes, color='gray', fontsize=10)
 
-    axes[2].set_title(f"XAI Heatmap ({type(xai_explainer).__name__})", fontsize=12)
+    axes[2].set_title(f"XAI Heatmap ({xai_explainer.get_method_name()})", fontsize=12)
     axes[2].axis('off')
 
     # Anpassen des Layouts, um Überlappungen zu vermeiden und Platz für Titel zu schaffen
     plt.tight_layout(rect=[0, 0.03, 1, 0.93]) # rect=[left, bottom, right, top]
-    
-    # Dateinamen für Output
+      # Dateinamen für Output
     base_out_name = os.path.splitext(os.path.basename(img_path))[0]
-    xai_method_name_for_file = type(xai_explainer).__name__.lower()
-    if isinstance(xai_explainer, globals().get('DummyExplainer', object)):
-        xai_method_name_for_file = "dummy_xai"
+    xai_method_name_for_file = xai_explainer.get_method_name().lower()
         
     output_filename = os.path.join(output_dir, f"{base_out_name}_eval_viz_{xai_method_name_for_file}.png")
     plt.savefig(output_filename) # Optional: dpi=fig_dpi beim Speichern hinzufügen
@@ -375,7 +356,8 @@ def main():
     parser.add_argument("--ann_dir", required=True, help="Pfad zum Ordner mit den Annotationen.")
     parser.add_argument("--model_path", required=True, help="Pfad zum trainierten Modell (.pt Datei).")
     parser.add_argument("--output_dir", required=True, help="Pfad zum Speicherort der Ergebnisbilder.")
-    parser.add_argument("--xai_method", type=str, default="lrp", choices=["lrp", "deeplift", "dummy"], # Füge hier mehr hinzu
+    parser.add_argument("--xai_method", type=str, default="lrp", 
+                        choices=["lrp", "deeplift", "integratedgradients", "gradcam++", "guidedgradcam", "reciprocam", "xrai", "customxrai", "scorecam", "inputxgradient", "shap", "rise", "occlusion", "felzenszwalb", "watershed", "dummy"],
                         help="Zu verwendende XAI-Methode.")
     parser.add_argument("--pred_threshold", type=float, default=0.5, 
                         help="Schwellenwert für die Vorhersage einer Defektklasse, um XAI zu triggern.")
